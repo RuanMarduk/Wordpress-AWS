@@ -2,10 +2,6 @@
 
 ## Arquitetura
 
-<p align="center">
-  <img width="1054" height="466" alt="image" src="https://github.com/user-attachments/assets/c8e9626c-f443-490c-ba4d-42f177c521c7">
-</p>
-
 Infraestrutura projetada para hospedar WordPress com alta disponibilidade:
 
 - **VPC** com 2 sub-redes públicas e 4 privadas
