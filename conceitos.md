@@ -1,121 +1,116 @@
-# WordPress HA na AWS com ASG, ALB, RDS, EFS e NAT
+## 1. VPC (Virtual Private Cloud)
 
-## Arquitetura
+Rede virtual isolada na AWS onde são alocados todos os recursos do projeto.
+Permite definir faixas de IP (CIDR), sub-redes, tabelas de rotas, gateways e políticas de segurança.
 
-Infraestrutura projetada para hospedar WordPress com alta disponibilidade:
+## 2. CIDR (Classless Inter-Domain Routing)
 
-- **VPC** com 2 sub-redes públicas e 4 privadas
-- **Auto Scaling Group** para EC2 rodando Docker + WordPress
-- **Application Load Balancer** distribuindo tráfego HTTP/HTTPS
-- **RDS MySQL** para dados persistentes
-- **EFS** compartilhado para uploads do WordPress
-- **NAT Gateway** para acesso outbound de EC2 privadas
+Notação que define o intervalo de endereços IP de uma rede.
+Exemplo: 10.0.0.0/16 → IPs de 10.0.0.0 a 10.0.255.255.
 
----
+## 3. Subnets
 
+Divisões lógicas da VPC, associadas a zonas de disponibilidade (AZs).
 
-## 1. Criar VPC e Sub-redes
+Públicas → com rota para Internet Gateway (usadas pelo Load Balancer).
 
-- 2 sub-redes públicas (ALB + NAT)
-- 4 sub-redes privadas (EC2)
-- Route tables separadas:
-     - Públicas → IGW
-     - Privadas → NAT Gateway
+Privadas → sem rota direta para a Internet, acessam via NAT Gateway (usadas pelas EC2 do WordPress).
 
-### 2. Criar Security Groups
+## 4. Internet Gateway (IGW)
 
-- **SG-ALB**: inbound 80/443 de 0.0.0.0/0; outbound liberado
-- **SG-EC2**: inbound 80 do SG-ALB, 22 do bastion; outbound liberado
-- **SG-RDS**: inbound 3306 do SG-EC2
-- **SG-EFS**: inbound 2049 do SG-EC2
+Dispositivo virtual que conecta a VPC à Internet, permitindo tráfego público de entrada e saída.
 
-### 3. Criar EFS
+## 5. NAT Gateway
 
-- Montado apenas nas privadas necessárias (private-03, private-04)
-- Associar SG-EFS
-- Teste: `sudo mount -t efs fs-XXXX:/ /mnt/efs`
-- Verificar: `df -h | grep efs`
+Gateway que permite que instâncias em sub-redes privadas acessem a Internet apenas para saída, sem ficarem acessíveis de fora.
 
-### 4. Criar RDS
+## 6. Route Table
 
-- Engine: MySQL 8.0
-- DB name: `name`
-- Usuário: `admin`
-- Acesso privado (sem IP público)
-- SG-RDS associado
-- Teste: `mysql -h <endpoint> -u admin -p`
+Tabela que define o destino do tráfego de rede dentro da VPC, associando sub-redes a gateways ou outros destinos.
 
-### 5. Criar Launch Template
+## 7. Security Group (SG)
 
-- AMI Amazon Linux 2023
-- `user-data` contendo instalação do Docker, configuração do EFS e variáveis do WordPress:
+Firewall virtual que controla tráfego de entrada (Inbound) e saída (Outbound) de recursos.
+As regras podem ser baseadas em portas, protocolos e origem/destino (IPs ou outros SGs).
 
-```bash
-yum update -y
-yum install -y docker amazon-efs-utils
-systemctl enable --now docker
-mkdir -p /mnt/efs
-echo "fs-XXXX.efs.us-east-2.amazonaws.com:/ /mnt/efs efs _netdev,tls 0 0" >> /etc/fstab
-mount -a
-docker run -d --name wordpress -p 80:80 \
-  -e WORDPRESS_DB_HOST=<endpoint-rds> \
-  -e WORDPRESS_DB_NAME=name \
-  -e WORDPRESS_DB_USER=admin \
-  -e WORDPRESS_DB_PASSWORD=<senha> \
-  -v /mnt/efs:/var/www/html \
-  wordpress
-```
+## 8. Elastic IP (EIP)
 
-### 6. Criar Auto Scaling Group
+Endereço IP público estático associado a um recurso na AWS (como NAT Gateway).
 
-- Sub-redes privadas
-- Target Group vinculado ao ALB
+## 9. Amazon EC2 (Elastic Compute Cloud)
 
-### 7. Criar ALB
+Serviço de máquinas virtuais escaláveis na AWS.
+No projeto, usado para hospedar containers Docker do WordPress.
 
-- Listener HTTP (80) → Target Group
-- Health Check para `/` com códigos `200,302`
+## 10. Launch Template
 
-### 8. Criar NAT Gateway
+Modelo de configuração para criação de instâncias EC2, definindo:
 
-- Sub-rede pública
-- Associar Elastic IP
-- Alterar route tables das privadas para enviar 0.0.0.0/0 → NAT
+AMI (sistema operacional)
 
----
+Tipo da instância
 
-## Testes
+Security Groups
 
-### EFS
+User data (scripts de inicialização)
 
-```bash
-df -h | grep efs
-cat /mnt/efs/teste-efs.txt
-```
+## 11. User Data
 
-### RDS
+Script que roda automaticamente na inicialização da EC2, usado para instalar e configurar software.
+No projeto, foi usado para:
 
-```bash
-mysql -h <endpoint-rds> -u admin -p
-SHOW DATABASES;
-USE databasewp;
-SHOW TABLES;
-```
+Instalar docker e amazon-efs-utils
 
-### ALB
+Montar o EFS
 
-- Acessar o DNS público e verificar tela inicial do WordPress
+Subir o container WordPress
 
-### Conectividade
+## 12. Amazon EFS (Elastic File System)
 
-```bash
-curl -I https://google.com
-```
+Sistema de arquivos compartilhado entre múltiplas instâncias, garantindo persistência e sincronização dos arquivos do WordPress.
 
-<p align="center">
-  <img width="1025" height="566" alt="Opera Instantâneo_2025-08-11_135127_wp-load-1962812018 us-east-2 elb amazonaws com" src="https://github.com/user-attachments/assets/bd53c1e8-6d95-4eb6-b5d5-d26e9558c8d1">
-</p>
+## 13. Amazon RDS (Relational Database Service)
 
+Banco de dados gerenciado.
+No projeto, usamos MySQL para armazenar dados do WordPress de forma separada das instâncias.
 
+## 14. Docker
 
+Plataforma de containers que empacota aplicações com todas as dependências necessárias.
+Aqui, foi usado para rodar o WordPress em EC2.
 
+## 15. Application Load Balancer (ALB)
+
+Balanceador de carga que distribui tráfego HTTP/HTTPS entre várias instâncias, garantindo alta disponibilidade.
+
+## 16. Target Group
+
+Grupo de recursos (EC2, IPs ou Lambda) que recebem tráfego do Load Balancer.
+Possui Health Checks para monitorar se os alvos estão saudáveis.
+
+## 17. Health Check
+
+Teste periódico feito pelo Target Group para verificar se a aplicação está respondendo.
+Se falhar, o recurso é marcado como Unhealthy e não recebe tráfego.
+
+## 18. Auto Scaling Group (ASG)
+
+Serviço que ajusta automaticamente a quantidade de instâncias EC2 de acordo com demanda ou falha, usando um Launch Template como base.
+
+## 19. Alta Disponibilidade
+
+Arquitetura projetada para minimizar tempo de inatividade, usando múltiplas AZs, balanceamento de carga e auto scaling.
+
+## 20. Fluxo Resumido do Projeto
+
+Usuário acessa o ALB pelo DNS público.
+
+ALB encaminha a requisição para uma instância no Target Group.
+
+EC2 com Docker atende via container WordPress.
+
+Arquivos do WordPress ficam no EFS (compartilhado entre instâncias).
+
+Dados são salvos no RDS MySQL.
+
+ASG garante que sempre haja pelo menos 2 instâncias saudáveis.
