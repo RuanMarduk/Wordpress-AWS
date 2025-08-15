@@ -1,5 +1,23 @@
 # WordPress HA na AWS com ASG, ALB, RDS, EFS e NAT
 
+Este projeto implementa uma arquitetura altamente disponível e escalável para hospedar o WordPress na AWS, utilizando práticas modernas de conteinerização e serviços gerenciados.
+
+A aplicação é executada em instâncias EC2 dentro de containers Docker, gerenciadas por um Auto Scaling Group (ASG), garantindo que a quantidade de servidores seja ajustada automaticamente conforme a demanda.
+
+O tráfego é distribuído de forma balanceada por um Application Load Balancer (ALB), que também realiza verificações de saúde (health checks) para garantir que apenas instâncias ativas recebam requisições.
+
+## Os dados persistentes são tratados em dois níveis:
+
+Banco de dados MySQL hospedado no Amazon RDS, para manter informações críticas do WordPress.
+
+Sistema de arquivos compartilhado Amazon EFS, para armazenar uploads, temas e plugins, permitindo que todas as instâncias compartilhem os mesmos arquivos.
+
+Para que as instâncias privadas tenham acesso à internet para atualizações e instalação de pacotes, é utilizado um NAT Gateway em sub-rede pública.
+
+Toda a infraestrutura é isolada em uma VPC personalizada, com separação entre sub-redes públicas (ALB e NAT) e privadas (EC2 e RDS), aumentando a segurança e o controle de tráfego.
+
+O resultado é uma solução resiliente, segura e pronta para produção, capaz de suportar falhas de instância e picos de acesso sem interrupções.
+
 ## Arquitetura
 
 Infraestrutura projetada para hospedar WordPress com alta disponibilidade:
